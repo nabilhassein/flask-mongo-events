@@ -1,11 +1,12 @@
 import os
+import bcrypt
 from app import app
-from flask import render_template, request, redirect
+from flask import render_template, request, redirect, session, url_for
 from flask_pymongo import PyMongo
 
 app.config['MONGO_DBNAME'] = 'database'
 app.config['MONGO_URI'] = 'mongodb+srv://admin:upperline2019@cluster0-n3alx.mongodb.net/database?retryWrites=true&w=majority'
-app.secret = b'insecure session verification'
+app.secret_key = b'\x1cS!\x17\xf6\x95~\x99p\xfa9\xadu\xb5\xef:'
 
 mongo = PyMongo(app)
 
@@ -45,20 +46,40 @@ def new_event():
     return redirect('/')
 
 
-# @app.route('/signup', methods=['POST', 'GET'])
-# def signup():
-#     if request.method == 'POST':
-#         users = mongo.db.users
-#         existing_user = users.find_one({'name' : request.form['username']})
+@app.route('/signup', methods=['POST', 'GET'])
+def signup():
+    if request.method == 'POST':
+        users = mongo.db.users
+        existing_user = users.find_one({'name' : request.form['username']})
 
-#         if existing_user is None:
-#             users.insert({
-#                 'name' : request.form['username'],
-#                 'password' : request.form['password']
-#             })
-#             session['username'] = request.form['username']
-#             return redirect(url_for('index'))
+        if existing_user is None:
+            hashpass = bcrypt.hashpw(request.form['password'].encode('utf-8'), bcrypt.gensalt())
+            users.insert({
+                'name' : request.form['username'],
+                'password' : str(hashpass, 'utf-8')
+            })
+            session['username'] = request.form['username']
+            return redirect(url_for('index'))
 
-#         return 'That username already exists! Try logging in.'
+        return 'That username already exists! Try logging in.'
 
-#     return render_template('signup.html')
+    return render_template('signup.html')
+
+
+@app.route('/login', methods=['POST'])
+def login():
+    users = mongo.db.users
+    login_user = users.find_one({'name' : request.form['username']})
+
+    if login_user:
+        if bcrypt.hashpw((request.form['password']).encode('utf-8'), login_user['password'].encode('utf-8')) == login_user['password'].encode('utf-8'):
+            session['username'] = request.form['username']
+            return redirect(url_for('index'))
+
+    return 'Invalid username/password combination'
+
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect('/')
